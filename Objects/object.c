@@ -123,6 +123,36 @@ _Py_NegativeRefcount(const char *filename, int lineno, PyObject *op)
                            filename, lineno, __func__);
 }
 
+void rumpel(int incdec, const char *filename, int lineno,
+            const char *funcname, PyObject *op)
+{
+    PyTypeObject *type = Py_TYPE(op);
+    if (strncmp(type->tp_name, "PySide", 6) == 0
+        || strncmp(type->tp_name + 1, "hiboken", 7) == 0) {
+        int dir = incdec == 'I' || incdec == 'i' ? 1 : -1;
+        const char *dirname = dir == 1 ? "INC" : "DEC";
+        const char *xmode = incdec == 'i' || incdec == 'd' ? "X" : " ";
+        Py_ssize_t ref = op ? Py_REFCNT(op) + dir : 0;
+        const char *typestr = type->tp_name;
+        if (typestr[7] == '.')
+            typestr = typestr + 8;
+        const char *basename = strrchr(filename, '/');
+        basename = basename == NULL ? filename : basename + 1;
+        if (incdec == 'N' || incdec == 'V') {
+            dirname = "";
+            xmode = incdec == 'N' ? "NEW " : "NVAR";
+            ref = 1;
+        }
+        fprintf(stderr, "%s%s %s:%d %s %p %s %ld\n",
+                         xmode, dirname, basename, lineno, funcname, op, typestr, ref);
+        // if (strcmp(type->tp_name, "PySide6.QtCore.QItemSelectionModel") == 0) {
+        //     PyObject *kill = NULL;
+        //     fprintf(stderr, "%s\n", "KILL");
+        //     Py_INCREF(kill);
+        // }
+    }
+}
+
 #endif /* Py_REF_DEBUG */
 
 void
@@ -160,25 +190,40 @@ PyObject_InitVar(PyVarObject *op, PyTypeObject *tp, Py_ssize_t size)
 }
 
 PyObject *
-_PyObject_New(PyTypeObject *tp)
+_PyObject_New(
+#ifdef Py_REF_DEBUG
+    const char *filename, int lineno, const char *funcname,
+#endif
+    PyTypeObject *tp)
 {
     PyObject *op = (PyObject *) PyObject_MALLOC(_PyObject_SIZE(tp));
     if (op == NULL) {
         return PyErr_NoMemory();
     }
     PyObject_INIT(op, tp);
+#ifdef Py_REF_DEBUG
+    rumpel('N', filename, lineno, funcname, op);
+#endif
     return op;
 }
 
 PyVarObject *
-_PyObject_NewVar(PyTypeObject *tp, Py_ssize_t nitems)
+_PyObject_NewVar(
+#ifdef Py_REF_DEBUG
+    const char *filename, int lineno, const char *funcname,
+#endif
+    PyTypeObject *tp, Py_ssize_t nitems)
 {
     PyVarObject *op;
     const size_t size = _PyObject_VAR_SIZE(tp, nitems);
     op = (PyVarObject *) PyObject_MALLOC(size);
     if (op == NULL)
         return (PyVarObject *)PyErr_NoMemory();
-    return PyObject_INIT_VAR(op, tp, nitems);
+    PyVarObject *ret = PyObject_INIT_VAR(op, tp, nitems);
+#ifdef Py_REF_DEBUG
+    rumpel('V', filename, lineno, funcname, (PyObject *)op);
+#endif
+    return ret;
 }
 
 void

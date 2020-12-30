@@ -116,20 +116,39 @@ PyAPI_FUNC(void) PyObject_Free(void *ptr);
  */
 
 /* Functions */
+
 PyAPI_FUNC(PyObject *) PyObject_Init(PyObject *, PyTypeObject *);
 PyAPI_FUNC(PyVarObject *) PyObject_InitVar(PyVarObject *,
                                                  PyTypeObject *, Py_ssize_t);
-PyAPI_FUNC(PyObject *) _PyObject_New(PyTypeObject *);
-PyAPI_FUNC(PyVarObject *) _PyObject_NewVar(PyTypeObject *, Py_ssize_t);
+PyAPI_FUNC(PyObject *) _PyObject_New(
+#ifdef Py_REF_DEBUG
+    const char *filename, int lineno, const char *funcname,
+#endif
+    PyTypeObject *);
 
-#define PyObject_New(type, typeobj) ((type *)_PyObject_New(typeobj))
+PyAPI_FUNC(PyVarObject *) _PyObject_NewVar(
+#ifdef Py_REF_DEBUG
+    const char *filename, int lineno, const char *funcname,
+#endif
+    PyTypeObject *, Py_ssize_t);
+
+#ifdef Py_REF_DEBUG
+#  define PyObject_New(type, typeobj) ((type *)_PyObject_New(__FILE__, __LINE__, __func__, typeobj))
+#else
+#  define PyObject_New(type, typeobj) ((type *)_PyObject_New(typeobj))
+#endif
 
 // Alias to PyObject_New(). In Python 3.8, PyObject_NEW() called directly
 // PyObject_MALLOC() with _PyObject_SIZE().
 #define PyObject_NEW(type, typeobj) PyObject_New(type, typeobj)
 
-#define PyObject_NewVar(type, typeobj, n) \
+#ifdef Py_REF_DEBUG
+#  define PyObject_NewVar(type, typeobj, n) \
+                ( (type *) _PyObject_NewVar(__FILE__, __LINE__, __func__, (typeobj), (n)) )
+#else
+#  define PyObject_NewVar(type, typeobj, n) \
                 ( (type *) _PyObject_NewVar((typeobj), (n)) )
+#endif
 
 // Alias to PyObject_New(). In Python 3.8, PyObject_NEW() called directly
 // PyObject_MALLOC() with _PyObject_VAR_SIZE().

@@ -400,23 +400,36 @@ PyAPI_FUNC(void) _Py_NegativeRefcount(const char *filename, int lineno,
 
 PyAPI_FUNC(void) _Py_Dealloc(PyObject *);
 
-static inline void _Py_INCREF(PyObject *op)
+PyAPI_FUNC(void) rumpel(int incdec, const char *filename, int lineno,
+                        const char *funcname, PyObject *op);
+
+static inline void _Py_INCREF(
+#ifdef Py_REF_DEBUG
+    const char *filename, int lineno, const char *funcname,
+#endif
+    PyObject *op)
 {
 #ifdef Py_REF_DEBUG
+    rumpel('I', filename, lineno, funcname, op);
     _Py_RefTotal++;
 #endif
     op->ob_refcnt++;
 }
 
-#define Py_INCREF(op) _Py_INCREF(_PyObject_CAST(op))
+#ifdef Py_REF_DEBUG
+#  define Py_INCREF(op) _Py_INCREF(__FILE__, __LINE__, __func__, _PyObject_CAST(op))
+#else
+#  define Py_INCREF(op) _Py_INCREF(_PyObject_CAST(op))
+#endif
 
 static inline void _Py_DECREF(
 #ifdef Py_REF_DEBUG
-    const char *filename, int lineno,
+    const char *filename, int lineno, const char *funcname,
 #endif
     PyObject *op)
 {
 #ifdef Py_REF_DEBUG
+    rumpel('D', filename, lineno, funcname, op);
     _Py_RefTotal--;
 #endif
     if (--op->ob_refcnt != 0) {
@@ -432,7 +445,7 @@ static inline void _Py_DECREF(
 }
 
 #ifdef Py_REF_DEBUG
-#  define Py_DECREF(op) _Py_DECREF(__FILE__, __LINE__, _PyObject_CAST(op))
+#  define Py_DECREF(op) _Py_DECREF(__FILE__, __LINE__, __func__, _PyObject_CAST(op))
 #else
 #  define Py_DECREF(op) _Py_DECREF(_PyObject_CAST(op))
 #endif
@@ -481,24 +494,81 @@ static inline void _Py_DECREF(
         }                                       \
     } while (0)
 
-/* Function to use in case the object pointer can be NULL: */
-static inline void _Py_XINCREF(PyObject *op)
+// /* Function to use in case the object pointer can be NULL: */
+// static inline void _Py_XINCREF(PyObject *op)
+// {
+//     if (op != NULL) {
+//         Py_INCREF(op);
+//     }
+// }
+
+// #define Py_XINCREF(op) _Py_XINCREF(_PyObject_CAST(op))
+
+// static inline void _Py_XDECREF(PyObject *op)
+// {
+//     if (op != NULL) {
+//         Py_DECREF(op);
+//     }
+// }
+
+// #define Py_XDECREF(op) _Py_XDECREF(_PyObject_CAST(op))
+
+
+///////////////////////////////////
+
+static inline void _Py_XINCREF(
+#ifdef Py_REF_DEBUG
+    const char *filename, int lineno, const char *funcname,
+#endif
+    PyObject *op)
 {
     if (op != NULL) {
-        Py_INCREF(op);
+#ifdef Py_REF_DEBUG
+        rumpel('i', filename, lineno, funcname, op);
+        _Py_RefTotal++;
+#endif
+        op->ob_refcnt++;
     }
 }
 
-#define Py_XINCREF(op) _Py_XINCREF(_PyObject_CAST(op))
+#ifdef Py_REF_DEBUG
+#  define Py_XINCREF(op) _Py_XINCREF(__FILE__, __LINE__, __func__, _PyObject_CAST(op))
+#else
+#  define Py_XINCREF(op) _Py_XINCREF(_PyObject_CAST(op))
+#endif
 
-static inline void _Py_XDECREF(PyObject *op)
+static inline void _Py_XDECREF(
+#ifdef Py_REF_DEBUG
+    const char *filename, int lineno, const char *funcname,
+#endif
+    PyObject *op)
 {
     if (op != NULL) {
-        Py_DECREF(op);
+#ifdef Py_REF_DEBUG
+        rumpel('d', filename, lineno, funcname, op);
+        _Py_RefTotal--;
+#endif
+        if (--op->ob_refcnt != 0) {
+#ifdef Py_REF_DEBUG
+            if (op->ob_refcnt < 0) {
+                _Py_NegativeRefcount(filename, lineno, op);
+            }
+#endif
+        }
+        else {
+            _Py_Dealloc(op);
+        }
     }
 }
 
-#define Py_XDECREF(op) _Py_XDECREF(_PyObject_CAST(op))
+#ifdef Py_REF_DEBUG
+#  define Py_XDECREF(op) _Py_XDECREF(__FILE__, __LINE__, __func__, _PyObject_CAST(op))
+#else
+#  define Py_XDECREF(op) _Py_XDECREF(_PyObject_CAST(op))
+#endif
+
+///////////////////////////////////
+
 
 /*
 These are provided as conveniences to Python runtime embedders, so that
